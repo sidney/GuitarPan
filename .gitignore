@@ -37,6 +37,3 @@ output.json
 #NDK
 obj/
 .externalNativeBuild
-
-# Project exclude paths
-/app/

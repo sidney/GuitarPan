@@ -1,3 +1,4 @@
+#include <jni.h>
 #include "GuitarPanEngine.h"
 static GuitarPanEngine engine;
 
@@ -12,6 +13,6 @@ Java_com_example_guitarpan_MainActivity_nativeStopEngine(JNIEnv *, jobject) {
 }
 JNIEXPORT void JNICALL
 Java_com_example_guitarpan_MainActivity_nativePlayNote(JNIEnv *, jobject, jint note, jint velocity) {
-    engine.playNote(note, velocity / 127.0f);
+    engine.playNote(note, static_cast<float>(velocity) / 127.0f);
 }
 }

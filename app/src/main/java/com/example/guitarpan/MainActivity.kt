@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
             val y = event.y.toInt()
             pads.find { (x - it.cx) * (x - it.cx) + (y - it.cy) * (y - it.cy) <= it.r * it.r }
                 ?.let {
-                    val vel = (sqrt(event.pressure) * 127).coerceIn(0, 127).toInt()
+                    val vel = (sqrt(event.pressure) * 127).coerceIn(0f, 127f).toInt()
                     nativePlayNote(it.noteIdx, vel)
                 }
         }

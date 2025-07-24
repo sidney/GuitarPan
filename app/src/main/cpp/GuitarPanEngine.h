@@ -24,5 +24,5 @@ private:
     };
 
     std::array<Voice, kMaxVoices> mVoices;
-    oboe::ManagedStream mStream;
+    std::shared_ptr<oboe::AudioStream> mStream;
 };

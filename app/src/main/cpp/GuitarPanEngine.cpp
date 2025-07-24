@@ -35,16 +35,18 @@ static const NoteParam kNotes[20] = {
 bool GuitarPanEngine::start() {
     oboe::AudioStreamBuilder b;
     b.setPerformanceMode(oboe::PerformanceMode::LowLatency)
-     .setSharingMode(oboe::SharingMode::Exclusive)
-     .setFormat(oboe::AudioFormat::Float)
-     .setChannelCount(oboe::ChannelCount::Mono)
-     .setSampleRate(kSampleRate)
-     .setDataCallback(this);
-    return b.openStream(mStream) == oboe::Result::OK && mStream->requestStart() == oboe::Result::OK;
+     ->setSharingMode(oboe::SharingMode::Exclusive)
+     ->setFormat(oboe::AudioFormat::Float)
+     ->setChannelCount(oboe::ChannelCount::Mono)
+     ->setSampleRate(kSampleRate)
+     ->setDataCallback(this);
+    oboe::Result r = b.openStream(mStream);
+    if (r != oboe::Result::OK) return false;
+    return mStream->requestStart() == oboe::Result::OK;
 }
 
 void GuitarPanEngine::stop() {
-    if (mStream) { mStream->close(); mStream.reset(); }
+    if (mStream) { mStream->close(); mStream = nullptr; }
 }
 
 void GuitarPanEngine::playNote(int idx, float velocity) {
@@ -54,7 +56,6 @@ void GuitarPanEngine::playNote(int idx, float velocity) {
     if (!v) return;  // no free voice
     v->active = true;
     v->age = 0;
-    const auto &p = kNotes[idx];
     for (int k = 0; k < 3; ++k) {
         v->phases[k] = 0.f;
         v->amps[k]   = velocity * 0.25f;   // scaling factor
@@ -63,7 +64,7 @@ void GuitarPanEngine::playNote(int idx, float velocity) {
 
 oboe::DataCallbackResult
 GuitarPanEngine::onAudioReady(oboe::AudioStream *, void *audioData, int32_t numFrames) {
-    float *out = static_cast<float*>(audioData);
+    auto out = static_cast<float*>(audioData);
     std::fill(out, out + numFrames, 0.f);
     for (auto &v : mVoices) {
         if (!v.active) continue;
