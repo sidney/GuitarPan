@@ -21,6 +21,7 @@ private:
         float amps[3]    = {0, 0, 0};
         int   age        = 0;
         bool  active     = false;
+        int   noteIdx    = 0;
     };
 
     std::array<Voice, kMaxVoices> mVoices;

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="background_image">background image</string>
+    <string name="debug_buttons">Debug Buttons</string>
+    <string name="show_tap_regions">Show Tap Regions</string>
+</resources>

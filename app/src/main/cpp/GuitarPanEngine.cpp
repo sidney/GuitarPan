@@ -54,6 +54,7 @@ void GuitarPanEngine::playNote(int idx, float velocity) {
     Voice *v = nullptr;
     for (auto &voice : mVoices) if (!voice.active) { v = &voice; break; }
     if (!v) return;  // no free voice
+    v->noteIdx = idx;
     v->active = true;
     v->age = 0;
     for (int k = 0; k < 3; ++k) {
@@ -66,9 +67,10 @@ oboe::DataCallbackResult
 GuitarPanEngine::onAudioReady(oboe::AudioStream *, void *audioData, int32_t numFrames) {
     auto out = static_cast<float*>(audioData);
     std::fill(out, out + numFrames, 0.f);
+// inside onAudioReady(...)
     for (auto &v : mVoices) {
         if (!v.active) continue;
-        const auto &p = kNotes[(v.age >> 16) & 0x1F]; // quick hack to keep idx
+        const auto &p = kNotes[v.noteIdx];
         for (int k = 0; k < 3; ++k) {
             float w  = kTwoPi * p.freq[k] / kSampleRate;
             float g  = exp(-p.damp[k] / kSampleRate);
@@ -80,6 +82,5 @@ GuitarPanEngine::onAudioReady(oboe::AudioStream *, void *audioData, int32_t numF
         }
         v.age += numFrames;
         if (v.amps[0] < 1e-4f) v.active = false;
-    }
-    return oboe::DataCallbackResult::Continue;
+    }    return oboe::DataCallbackResult::Continue;
 }
