@@ -12,9 +12,9 @@
 class AudioEngine : public oboe::AudioStreamDataCallback {
 public:
     AudioEngine();
-    ~AudioEngine();
+    ~AudioEngine() override;
 
-    void start();
+    bool start();
     void stop();
     void playNote(int noteId);
 
@@ -29,6 +29,7 @@ private:
 
     PanSynth mSynths[MAX_POLYPHONY];
     double mNoteFrequencies[TOTAL_MUSICAL_NOTES];
+    bool mIsSuccessfullyStarted = false;
 };
 
 #endif //GUITARPAN_AUDIOENGINE_H

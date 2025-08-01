@@ -1,8 +1,11 @@
 #include "AudioEngine.h"
 #include <android/log.h>
+#include <unistd.h> // For gettid()
 
 // THIS MUST MATCH MusicalNote.count in Kotlin
 #define TOTAL_MUSICAL_NOTES 20
+
+#define APPNAME "GuitarPanAudioEngine" // Define a log tag
 
 AudioEngine::AudioEngine() {
     // Frequencies for C#3 to G#4. Order MUST MATCH MusicalNote enum in Kotlin.
@@ -29,14 +32,14 @@ AudioEngine::AudioEngine() {
     mNoteFrequencies[19] = 415.30; // GS4 ("G#4", "Ab4")
 
     // ... rest of constructor, start();
-    start();
+    //start();  not called here, is called in the JNI native start function
 }
 
 AudioEngine::~AudioEngine() {
     stop();
 }
 
-void AudioEngine::start() {
+bool AudioEngine::start() {
     std::lock_guard<std::mutex> lock(mLock);
     oboe::AudioStreamBuilder builder;
     builder.setDirection(oboe::Direction::Output)
@@ -53,8 +56,11 @@ void AudioEngine::start() {
         for (auto &synth : mSynths) {
             synth.setSampleRate(sampleRate);
         }
+        mIsSuccessfullyStarted = true;
+        return true; // Indicate success
     } else {
-        __android_log_print(ANDROID_LOG_ERROR, "AudioEngine", "Failed to create Oboe stream");
+        mIsSuccessfullyStarted = false;
+        return false; // Indicate failure
     }
 }
 

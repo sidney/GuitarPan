@@ -7,7 +7,7 @@ static AudioEngine *audioEngine = nullptr;
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_example_guitarpan_MainActivity_startAudioEngine(JNIEnv *env, jobject /* this */) {
+Java_com_example_guitarpan_MainActivity_startAudioEngineNative(JNIEnv *env, jobject /* this */) {
 if (audioEngine == nullptr) {
 audioEngine = new AudioEngine();
 }

@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3) // Assuming you have an alias for this
 
+    implementation(libs.androidx.compose.ui.test)
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
