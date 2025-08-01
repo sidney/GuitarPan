@@ -12,9 +12,9 @@
 class AudioEngine : public oboe::AudioStreamDataCallback {
 public:
     AudioEngine();
-    ~AudioEngine();
+    ~AudioEngine() override;
 
-    void start();
+    bool start();
     void stop();
     void playNote(int noteId);
 

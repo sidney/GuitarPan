@@ -6,16 +6,20 @@ static AudioEngine *audioEngine = nullptr;
 
 extern "C" {
 
-JNIEXPORT void JNICALL
-Java_com_example_guitarpan_MainActivity_startAudioEngine(JNIEnv *env, jobject /* this */) {
-if (audioEngine == nullptr) {
-audioEngine = new AudioEngine();
-}
-audioEngine->start();
+JNIEXPORT jboolean JNICALL
+Java_com_example_guitarpan_MainActivity_startAudioEngineNative([[maybe_unused]] JNIEnv *env, jobject /* this */) {
+    if (audioEngine == nullptr) {
+        audioEngine = new AudioEngine();
+    }
+    if (audioEngine->start()) {
+        return JNI_TRUE;
+    } else {
+        return JNI_FALSE;
+    }
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_guitarpan_MainActivity_stopAudioEngine(JNIEnv *env, jobject /* this */) {
+Java_com_example_guitarpan_MainActivity_stopAudioEngine([[maybe_unused]] JNIEnv *env, jobject /* this */) {
 if (audioEngine) {
 audioEngine->stop();
 delete audioEngine;
@@ -24,7 +28,7 @@ audioEngine = nullptr;
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_guitarpan_MainActivity_playNote(JNIEnv *env, jobject /* this */, jint noteId) {
+Java_com_example_guitarpan_MainActivity_playNote([[maybe_unused]] JNIEnv *env, jobject /* this */, jint noteId) {
 if (audioEngine) {
 audioEngine->playNote(noteId);
 }
