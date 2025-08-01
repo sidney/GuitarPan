@@ -34,8 +34,11 @@ class MainActivity : ComponentActivity() {
     }
 
     // JNI function declarations
+    @Suppress("KotlinJniMissingFunction")
     private external fun startAudioEngineNative(): Boolean
+    @Suppress("KotlinJniMissingFunction")
     private external fun stopAudioEngine()
+    @Suppress("KotlinJniMissingFunction")
     private external fun playNote(noteId: Int)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,16 +72,21 @@ fun PanUIRoot(onPlayNote: (noteId: Int) -> Unit) { // Accepts the action
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) { // `this` is BoxWithConstraintsScope
+        val maxDiameterConstrainedByHeight = maxHeight // Each drum can be as tall as the screen
+        val maxDiameterConstrainedBySharedWidth = maxWidth / 2 // Each drum gets half the width
+        // The actual diameter is limited by the smaller of these constraints
+        val optimalDiameterForEachDrum = androidx.compose.ui.unit.min(maxDiameterConstrainedByHeight, maxDiameterConstrainedBySharedWidth)
         // Calculate drumSize within the scope where maxWidth and maxHeight are available
-        val drumSize = min(maxWidth.value, maxHeight.value) / 2.2f
+        val drumDisplayDiameterDp = optimalDiameterForEachDrum * 0.9f // Use 90% of the calculated optimal space
+        val drumSizeForPanDrum = drumDisplayDiameterDp.value
 
         Row(
             modifier = Modifier.fillMaxSize(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PanDrum(drumSize, noteLayout.leftDrumNotes, onNoteTapped = onPlayNote)
-            PanDrum(drumSize, noteLayout.rightDrumNotes, onNoteTapped = onPlayNote)
+            PanDrum(drumSizeForPanDrum, noteLayout.leftDrumNotes, onNoteTapped = onPlayNote)
+            PanDrum(drumSizeForPanDrum, noteLayout.rightDrumNotes, onNoteTapped = onPlayNote)
         }
     }
 }
@@ -101,41 +109,73 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
     Canvas(modifier = Modifier
         .size(diameterDp.dp)
         .pointerInput(Unit) {
-            val canvasCenter = Offset(size.width / 2f, size.height / 2f)
-            detectTapGestures { tapOffset ->
-                var noteTapped = false
-                // Check outer notes first (they are usually larger targets)
-                outerNotes.forEachIndexed { index, note ->
-                    if (note.isPointInside(
-                            tapOffset,
-                            canvasCenter,
-                            drumRadiusPx,
-                            outerNotes.size,
-                            index, // Pass the note's index within the outer ring
-                            innerRadiusRatioForOuterRing
-                        )
-                    ) {
-                        onNoteTapped(note.id)
-                        return@detectTapGestures // Found a note, no need to check others
-                    }
-                }
+            detectTapGestures(
+                onPress = { pressOffset ->
+                    // This block is executed on pointer down (touch)
+                    val canvasCenter = Offset(size.width / 2f, size.height / 2f)
 
-                innerNotes.forEach { note ->
-                    // For inner notes, noteIndexInOuterRing is not relevant, pass 0 or any dummy
-                    if (note.isPointInside(
-                            tapOffset,
-                            canvasCenter,
-                            drumRadiusPx,
-                            0, // outerNotesCount not relevant for inner note hit test logic
-                            0, // noteIndexInOuterRing not relevant for inner
-                            innerRadiusRatioForOuterRing // Still need this for inner area boundary
-                        )
-                    ) {
-                        onNoteTapped(note.id)
-                        return@detectTapGestures // Found a note
+                    var noteFound = false
+                    // Check outer notes first
+                    outerNotes.forEachIndexed { index, note ->
+                        if (note.isPointInside(
+                                pressOffset, // Use the offset from onPress
+                                canvasCenter,
+                                drumRadiusPx,
+                                outerNotes.size,
+                                index,
+                                innerRadiusRatioForOuterRing
+                            )
+                        ) {
+                            onNoteTapped(note.id)
+                            noteFound = true
+                            return@forEachIndexed // Found a note in outer, exit this loop
+                        }
                     }
+
+                    if (noteFound) {
+                        // If you want to consume the event and not proceed to onTap or other gestures
+                        // you might need to handle the press interaction differently or use tryAwaitRelease()
+                        // For simply triggering on down, this is often enough.
+                        // The default behavior of detectTapGestures will still try to detect onTap, onLongPress etc.
+                        // after onPress completes.
+                        tryAwaitRelease() // Wait for the pointer to release to complete the press sequence
+                        return@detectTapGestures
+                    }
+
+                    // Check inner notes if no outer note was hit
+                    innerNotes.forEach { note ->
+                        if (note.isPointInside(
+                                pressOffset, // Use the offset from onPress
+                                canvasCenter,
+                                drumRadiusPx,
+                                0,
+                                0,
+                                innerRadiusRatioForOuterRing
+                            )
+                        ) {
+                            onNoteTapped(note.id)
+                            noteFound = true
+                            return@forEach // Found a note in inner, exit this loop
+                        }
+                    }
+
+                    if (noteFound) {
+                        tryAwaitRelease() // Wait for the pointer to release
+                        return@detectTapGestures
+                    }
+
+                    // If you reach here, no note was pressed.
+                    // Allow detectTapGestures to continue trying to detect onTap, onLongPress, etc.
+                    // by calling tryAwaitRelease(). If you don't call it, other gesture detectors
+                    // might not work as expected.
+                    tryAwaitRelease()
                 }
-            }
+                // You can still keep onTap if you need it for other reasons,
+                // or remove it if onPress handles everything.
+                // onTap = { tapOffset ->
+                //    // This is called on pointer up if no other gesture consumed it
+                // }
+            )
         }
     ) {
         val drawingCenter = Offset(size.width / 2f, size.height / 2f)

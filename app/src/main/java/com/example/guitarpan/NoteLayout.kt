@@ -10,8 +10,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
 import android.graphics.Paint // Keep for text
-// import androidx.compose.ui.test.topLeft
-// import androidx.compose.ui.unit.size
 import kotlin.math.*
 
 // MusicalNote and TOTAL_UNIQUE_NOTES_COUNT remain the same
@@ -239,33 +237,33 @@ class NoteLayout {
     val leftDrumNotes = listOf(
         // Outer - centerRatio defines inner boundary of the ring, e.g. 0.6 means ring is from 0.6*R to R
         createNote(name = "C4", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "E4", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "F#3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "Bb3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "D3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "G#3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "E3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "D3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "Bb3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "F#3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "E4", type = NoteType.OUTER, centerRatio = 0.6f),
 
         // Inner - xOffset/yOffset are relative to center of *inner area* (-1 to 1 range typical)
         // centerRatio for inner notes defines their radial distance factor if angleDegrees is used for polar placement.
         // Or, use xOffset/yOffset for cartesian placement within the inner circle.
         // sizeFactor is crucial for inner note sizes.
-        createNote(name = "D4", type = NoteType.INNER, xOffset = 0f, yOffset = -0.5f, sizeFactor = 0.8f),
-        createNote(name = "F#4", type = NoteType.INNER, xOffset = -0.45f, yOffset = 0.25f, sizeFactor = 0.7f),
-        createNote(name = "G#4", type = NoteType.INNER, xOffset = 0.45f, yOffset = 0.25f, sizeFactor = 0.7f)
+        createNote(name = "D4", type = NoteType.INNER, xOffset = 0f, yOffset = 0.5f, sizeFactor = 0.8f),
+        createNote(name = "G#4", type = NoteType.INNER, xOffset = -0.45f, yOffset = -0.25f, sizeFactor = 0.7f),
+        createNote(name = "F#4", type = NoteType.INNER, xOffset = 0.45f, yOffset = -0.25f, sizeFactor = 0.7f)
     )
 
     val rightDrumNotes = listOf(
         createNote(name = "B3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "Eb4", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "F3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "A3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "C#3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "G3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "Eb3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "C#3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "A3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "F3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "Eb4", type = NoteType.OUTER, centerRatio = 0.6f),
 
-        createNote(name = "C#4", type = NoteType.INNER, xOffset = 0f, yOffset = -0.5f, sizeFactor = 0.8f),
-        createNote(name = "F4", type = NoteType.INNER, xOffset = -0.45f, yOffset = 0.25f, sizeFactor = 0.7f),
-        createNote(name = "G4", type = NoteType.INNER, xOffset = 0.45f, yOffset = 0.25f, sizeFactor = 0.7f)
+        createNote(name = "C#4", type = NoteType.INNER, xOffset = 0f, yOffset = 0.5f, sizeFactor = 0.8f),
+        createNote(name = "G4", type = NoteType.INNER, xOffset = -0.45f, yOffset = -0.25f, sizeFactor = 0.7f),
+        createNote(name = "F4", type = NoteType.INNER, xOffset = 0.45f, yOffset = -0.25f, sizeFactor = 0.7f)
     )
 }
