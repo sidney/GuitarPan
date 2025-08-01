@@ -5,8 +5,6 @@
 // THIS MUST MATCH MusicalNote.count in Kotlin
 #define TOTAL_MUSICAL_NOTES 20
 
-#define APPNAME "GuitarPanAudioEngine" // Define a log tag
-
 AudioEngine::AudioEngine() {
     // Frequencies for C#3 to G#4. Order MUST MATCH MusicalNote enum in Kotlin.
 
@@ -56,10 +54,8 @@ bool AudioEngine::start() {
         for (auto &synth : mSynths) {
             synth.setSampleRate(sampleRate);
         }
-        mIsSuccessfullyStarted = true;
         return true; // Indicate success
     } else {
-        mIsSuccessfullyStarted = false;
         return false; // Indicate failure
     }
 }

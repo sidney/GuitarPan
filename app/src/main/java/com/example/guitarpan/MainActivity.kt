@@ -1,7 +1,6 @@
 package com.example.guitarpan
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -15,16 +14,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-//import androidx.compose.foundation.layout.BoxWithConstraintsScope // Potentially needed if you were to make helper extensions
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-//import androidx.compose.ui.graphics.Color
-//import androidx.compose.ui.graphics.drawscope.DrawScope
-//import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -39,7 +34,7 @@ class MainActivity : ComponentActivity() {
     }
 
     // JNI function declarations
-    private external fun startAudioEngineNative()
+    private external fun startAudioEngineNative(): Boolean
     private external fun stopAudioEngine()
     private external fun playNote(noteId: Int)
 
@@ -121,26 +116,23 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
                         )
                     ) {
                         onNoteTapped(note.id)
-                        noteTapped = true
                         return@detectTapGestures // Found a note, no need to check others
                     }
                 }
 
-                if (!noteTapped) {
-                    innerNotes.forEach { note ->
-                        // For inner notes, noteIndexInOuterRing is not relevant, pass 0 or any dummy
-                        if (note.isPointInside(
-                                tapOffset,
-                                canvasCenter,
-                                drumRadiusPx,
-                                0, // outerNotesCount not relevant for inner note hit test logic
-                                0, // noteIndexInOuterRing not relevant for inner
-                                innerRadiusRatioForOuterRing // Still need this for inner area boundary
-                            )
-                        ) {
-                            onNoteTapped(note.id)
-                            return@detectTapGestures // Found a note
-                        }
+                innerNotes.forEach { note ->
+                    // For inner notes, noteIndexInOuterRing is not relevant, pass 0 or any dummy
+                    if (note.isPointInside(
+                            tapOffset,
+                            canvasCenter,
+                            drumRadiusPx,
+                            0, // outerNotesCount not relevant for inner note hit test logic
+                            0, // noteIndexInOuterRing not relevant for inner
+                            innerRadiusRatioForOuterRing // Still need this for inner area boundary
+                        )
+                    ) {
+                        onNoteTapped(note.id)
+                        return@detectTapGestures // Found a note
                     }
                 }
             }

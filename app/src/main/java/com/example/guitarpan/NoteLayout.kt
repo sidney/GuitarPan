@@ -107,7 +107,6 @@ data class Note(
         outerNotesCount: Int,
         noteIndexInOuterRing: Int, // Only relevant for OUTER notes
         innerRadiusRatioForOuterRing: Float,
-        debugLines: Boolean = false // For visualizing hit areas
     ) {
         drawScope.apply {
             if (type == NoteType.OUTER) {

@@ -29,7 +29,6 @@ private:
 
     PanSynth mSynths[MAX_POLYPHONY];
     double mNoteFrequencies[TOTAL_MUSICAL_NOTES];
-    bool mIsSuccessfullyStarted = false;
 };
 
 #endif //GUITARPAN_AUDIOENGINE_H
