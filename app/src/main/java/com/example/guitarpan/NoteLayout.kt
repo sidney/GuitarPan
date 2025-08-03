@@ -2,14 +2,13 @@ package com.example.guitarpan
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
-import android.graphics.Paint // Keep for text
 import kotlin.math.*
 
 // MusicalNote and TOTAL_UNIQUE_NOTES_COUNT remain the same
@@ -27,6 +26,7 @@ data class Note(
     // For OUTER notes: defines the ratio of the inner radius of the outer ring.
     // For INNER notes: defines distance from center.
     val centerRatio: Float = 0.75f,
+    val color: Color = Color.White,
     val xOffset: Float = 0f, // For INNER notes: relative X position from center of inner area
     val yOffset: Float = 0f  // For INNER notes: relative Y position from center of inner area
 ) {
@@ -69,140 +69,179 @@ data class Note(
             } else { // Wrap around case (shouldn't happen with normalized startAngleForNote)
                 return angle >= startAngleForNote || angle < endAngleForNote
             }
+        } else if (type == NoteType.INNER) {
+            val innerAreaMaxRadius =
+                drumRadius * innerRadiusRatioForOuterRing // Boundary of the clear inner space
+            val baseInnerNoteRadius =
+                innerAreaMaxRadius * 0.30f // e.g., a note is 30% of the inner area radius by default
+            val finalInnerNoteRadius = baseInnerNoteRadius * this.sizeFactor
 
-        } else { // INNER
-            // Inner notes are ovals. Their positions are relative to the center of the
-            // area *inside* the outer ring.
-            val innerAreaRadius = drumRadius * innerRadiusRatioForOuterRing
+            if (finalInnerNoteRadius <= 0) return false
 
-            // Calculate the specific center of this inner note
-            // xOffset and yOffset are relative to the center of the *inner area*
-            val innerNoteCenterX = drumCenter.x + (xOffset * innerAreaRadius)
-            val innerNoteCenterY = drumCenter.y + (yOffset * innerAreaRadius)
-            // val innerNoteCenter = Offset(innerNoteCenterX, innerNoteCenterY)
+            val dx =
+                tapOffset.x - (drumCenter.x + (xOffset * innerAreaMaxRadius)) // Account for xOffset
+            val dy =
+                tapOffset.y - (drumCenter.y + (yOffset * innerAreaMaxRadius)) // Account for yOffset
+            val distanceFromNoteCenter = sqrt(dx * dx + dy * dy)
 
-            // Size of inner ovals. sizeFactor is relative to a fraction of innerAreaRadius
-            val baseOvalSize = innerAreaRadius * 0.3f // Base size for an inner oval if sizeFactor is 1
-            val noteWidth = baseOvalSize * sizeFactor
-            val noteHeight = baseOvalSize * sizeFactor * 0.8f // Make them slightly elliptical by default
-
-            val ovalRect = Rect(
-                left = innerNoteCenterX - noteWidth / 2f,
-                top = innerNoteCenterY - noteHeight / 2f,
-                right = innerNoteCenterX + noteWidth / 2f,
-                bottom = innerNoteCenterY + noteHeight / 2f
-            )
-            return ovalRect.contains(tapOffset)
+            return distanceFromNoteCenter <= finalInnerNoteRadius
         }
+        return false
     }
 
     // --- DRAWING ---
+// Make sure this is inside your data class Note { ... }
+// or if it's an extension function: fun Note.draw(...)
 
-    fun draw(
+    fun draw( // If it's a member function in Note class
+// fun Note.draw( // If you prefer it as an extension function
         drawScope: DrawScope,
         drumCenter: Offset,
         drumRadius: Float,
         outerNotesCount: Int,
         noteIndexInOuterRing: Int, // Only relevant for OUTER notes
-        innerRadiusRatioForOuterRing: Float,
+        innerRadiusRatioForOuterRing: Float // For OUTER notes, this is note.centerRatio.
+        // For INNER notes, this is the drum's overall inner area boundary ratio.
     ) {
         drawScope.apply {
             if (type == NoteType.OUTER) {
-                if (outerNotesCount == 0) return
+                // --- Outer Note Drawing (Convex Inner Edge) ---
+                val angleStep = 360f / outerNotesCount
+                // Adjusted startAngle to better center the segment visually
+                val baseStartAngle = (noteIndexInOuterRing * angleStep) - 90f
+                val segmentStartAngle = baseStartAngle - (angleStep / 2f)
+                val segmentSweepAngle = angleStep
 
-                val sweepAngleDegrees = 360f / outerNotesCount
-                // Start angle offset by -90 degrees to make the first segment start at the top (12 o'clock)
-                val startAngleDegrees = (noteIndexInOuterRing * sweepAngleDegrees) - 90f
+                // 'centerRatio' of an OUTER note defines the inner radius of its ring segment
+                val outerNoteInnerRadius = drumRadius * centerRatio
 
-                val noteRingOuterRadius = drumRadius
-                val noteRingInnerRadius = drumRadius * innerRadiusRatioForOuterRing
+                val path = Path()
 
-                // Path for the outer segment (pie slice)
-                val segmentPath = Path().apply {
-                    // Move to the inner-start point of the arc
-                    moveTo(
-                        drumCenter.x + innerRadiusRatioForOuterRing * drumRadius * cos(Math.toRadians(startAngleDegrees.toDouble())).toFloat(),
-                        drumCenter.y + innerRadiusRatioForOuterRing * drumRadius * sin(Math.toRadians(startAngleDegrees.toDouble())).toFloat()
-                    )
-                    // Line to the outer-start point of the arc
-                    lineTo(
-                        drumCenter.x + drumRadius * cos(Math.toRadians(startAngleDegrees.toDouble())).toFloat(),
-                        drumCenter.y + drumRadius * sin(Math.toRadians(startAngleDegrees.toDouble())).toFloat()
-                    )
-                    // Arc along the outer edge
-                    arcTo(
-                        rect = Rect(center = drumCenter, radius = drumRadius),
-                        startAngleDegrees = startAngleDegrees,
-                        sweepAngleDegrees = sweepAngleDegrees,
-                        forceMoveTo = false
-                    )
-                    // Line to the inner-end point of the arc
-                    lineTo(
-                        drumCenter.x + innerRadiusRatioForOuterRing * drumRadius * cos(Math.toRadians((startAngleDegrees + sweepAngleDegrees).toDouble())).toFloat(),
-                        drumCenter.y + innerRadiusRatioForOuterRing * drumRadius * sin(Math.toRadians((startAngleDegrees + sweepAngleDegrees).toDouble())).toFloat()
-                    )
-                    // Arc along the inner edge (drawn in reverse to close the path)
-                    arcTo(
-                        rect = Rect(center = drumCenter, radius = innerRadiusRatioForOuterRing * drumRadius),
-                        startAngleDegrees = startAngleDegrees + sweepAngleDegrees,
-                        sweepAngleDegrees = -sweepAngleDegrees, // Draw inner arc in reverse
-                        forceMoveTo = false
-                    )
-                    close()
-                }
-                drawPath(segmentPath, Color.White) // Fill the segment
-                drawPath(segmentPath, Color.Black, style = Stroke(width = 1.dp.toPx())) // Outline
+                //region Calculate corner points
+                val outerArcStartPoint = Offset(
+                    drumCenter.x + drumRadius * cos(Math.toRadians(segmentStartAngle.toDouble())).toFloat(),
+                    drumCenter.y + drumRadius * sin(Math.toRadians(segmentStartAngle.toDouble())).toFloat()
+                )
+//                val outerArcEndPoint = Offset( // Though not directly used by variable name, its coordinates are where arcTo ends
+//                    drumCenter.x + drumRadius * cos(Math.toRadians((segmentStartAngle + segmentSweepAngle).toDouble())).toFloat(),
+//                    drumCenter.y + drumRadius * sin(Math.toRadians((segmentStartAngle + segmentSweepAngle).toDouble())).toFloat()
+//                )
+                val innerArcStartPoint = Offset(
+                    drumCenter.x + outerNoteInnerRadius * cos(Math.toRadians(segmentStartAngle.toDouble())).toFloat(),
+                    drumCenter.y + outerNoteInnerRadius * sin(Math.toRadians(segmentStartAngle.toDouble())).toFloat()
+                )
+                val innerArcEndPoint = Offset(
+                    drumCenter.x + outerNoteInnerRadius * cos(Math.toRadians((segmentStartAngle + segmentSweepAngle).toDouble())).toFloat(),
+                    drumCenter.y + outerNoteInnerRadius * sin(Math.toRadians((segmentStartAngle + segmentSweepAngle).toDouble())).toFloat()
+                )
+                //endregion
 
-                // Text in the middle of the segment
-                val textAngleDegrees = startAngleDegrees + sweepAngleDegrees / 2f
-                val textRadius = (noteRingInnerRadius + noteRingOuterRadius) / 2f
-                val textX = drumCenter.x + textRadius * cos(Math.toRadians(textAngleDegrees.toDouble())).toFloat()
-                val textY = drumCenter.y + textRadius * sin(Math.toRadians(textAngleDegrees.toDouble())).toFloat()
+                // Start from one end of the desired inner curved edge
+                path.moveTo(innerArcStartPoint.x, innerArcStartPoint.y)
+                // Line to the corresponding point on the outer radius
+                path.lineTo(outerArcStartPoint.x, outerArcStartPoint.y)
+                // Draw the outer arc
+                path.arcTo(
+                    rect = Rect(center = drumCenter, radius = drumRadius),
+                    startAngleDegrees = segmentStartAngle,
+                    sweepAngleDegrees = segmentSweepAngle,
+                    forceMoveTo = false
+                )
+                // Line from the end of the outer arc to the other end of the desired inner curved edge
+                path.lineTo(innerArcEndPoint.x, innerArcEndPoint.y)
 
-                val textPaint = Paint().apply {
-                    color = android.graphics.Color.BLACK
-                    textSize = drumRadius * 0.1f // Scale text with drum size
-                    textAlign = Paint.Align.CENTER
-                }
-                drawContext.canvas.nativeCanvas.drawText(
-                    name,
-                    textX,
-                    textY - ((textPaint.descent() + textPaint.ascent()) / 2f), // Center vertically
-                    textPaint
+                // --- Corrected Inner Edge Curve Logic ---
+                val curveDepthAmount = drumRadius * 0.08f // Adjust for more/less inward curve depth
+
+                val midAngleRad = Math.toRadians(segmentStartAngle + segmentSweepAngle / 2.0).toFloat()
+
+                // Control point is INWARD from the straight line connecting innerArcStartPoint and innerArcEndPoint
+                // It lies on the bisector of the segment, at a radius smaller than outerNoteInnerRadius.
+                val controlPointRadius = outerNoteInnerRadius - curveDepthAmount // Key change: SUBTRACT
+
+                val controlPoint = Offset(
+                    drumCenter.x + controlPointRadius * cos(midAngleRad),
+                    drumCenter.y + controlPointRadius * sin(midAngleRad)
                 )
 
-            } else { // INNER
-                val innerAreaRadius = drumRadius * innerRadiusRatioForOuterRing
-                val innerNoteCenterX = drumCenter.x + (xOffset * innerAreaRadius)
-                val innerNoteCenterY = drumCenter.y + (yOffset * innerAreaRadius)
-                val innerNoteCenter = Offset(innerNoteCenterX, innerNoteCenterY) // For text placement
-
-                val baseOvalSize = innerAreaRadius * 0.4f // Adjust base size
-                val noteWidth = baseOvalSize * sizeFactor
-                val noteHeight = baseOvalSize * sizeFactor * 0.8f // Elliptical
-
-                // CORRECTED Rect creation for drawing the oval:
-                // We need the top-left and the size for drawOval
-                val ovalTopLeft = Offset(
-                    x = innerNoteCenterX - noteWidth / 2f,
-                    y = innerNoteCenterY - noteHeight / 2f
+                // The path's current point is innerArcEndPoint.
+                // We want to curve from innerArcEndPoint BACK to innerArcStartPoint.
+                path.quadraticTo(
+                    controlPoint.x, controlPoint.y,
+                    innerArcStartPoint.x, innerArcStartPoint.y
                 )
-                val ovalSize = Size(noteWidth, noteHeight)
 
-                drawOval(color = Color.White, topLeft = ovalTopLeft, size = ovalSize)
-                drawOval(color = Color.Black, topLeft = ovalTopLeft, size = ovalSize, style = Stroke(width = 1.dp.toPx()))
+                path.close()
+                drawPath(path = path, color = color) // Use the Note's color property
 
-                val textPaint = Paint().apply {
-                    color = android.graphics.Color.BLACK
-                    textSize = noteHeight * 0.4f // Scale text with oval height
-                    textAlign = Paint.Align.CENTER
+                // Optional: Draw a border for the outer note segment
+                drawPath(path = path, color = Color.Red, style = Stroke(width = 1.dp.toPx()))
+
+                // --- Text for Outer Note (Optional) ---
+                // Calculate a position for the text, e.g., in the middle of the segment's radial depth
+                val textRadius = (drumRadius + outerNoteInnerRadius) / 2f
+                val textAngleRad = Math.toRadians(segmentStartAngle + segmentSweepAngle / 2.0).toFloat()
+                val textCenterX = drumCenter.x + textRadius * cos(textAngleRad)
+                val textCenterY = drumCenter.y + textRadius * sin(textAngleRad)
+
+                val textPaintOuter = android.graphics.Paint().apply {
+                    color = Color.Blue.toArgb() // Or a contrasting color
+                    textSize = (drumRadius - outerNoteInnerRadius) * 0.3f // Adjust size based on segment height
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    // Consider rotating text if segments are narrow, or using curved text (more complex)
                 }
                 drawContext.canvas.nativeCanvas.drawText(
-                    name,
-                    innerNoteCenter.x, // Text is centered on the logical center
-                    innerNoteCenter.y - ((textPaint.descent() + textPaint.ascent()) / 2f),
-                    textPaint
+                    name, // Use Note's name property
+                    textCenterX,
+                    textCenterY - ((textPaintOuter.descent() + textPaintOuter.ascent()) / 2f),
+                    textPaintOuter
                 )
+
+            } else if (type == NoteType.INNER) {
+                // --- Inner Note Drawing (Circular) ---
+                // innerRadiusRatioForOuterRing here is the ratio defining the *entire* central clear area of the drum
+                val innerDrumAreaRadius = drumRadius * innerRadiusRatioForOuterRing
+
+                // Calculate the actual center of this inner note using its xOffset and yOffset
+                // These offsets are relative to the center of the innerDrumAreaRadius
+                val noteActualCenterX = drumCenter.x + (xOffset * innerDrumAreaRadius)
+                val noteActualCenterY = drumCenter.y + (yOffset * innerDrumAreaRadius)
+                val noteActualVisualCenter = Offset(noteActualCenterX, noteActualCenterY)
+
+                // Determine the radius of this inner note
+                // Let's define a base proportion of the innerDrumAreaRadius that a note takes up by default,
+                // and then scale it by the note's individual sizeFactor.
+                val baseProportionOfInnerArea = 0.35f // e.g., a note's radius is 35% of the inner drum area radius by default
+                val finalNoteRadius = (innerDrumAreaRadius * baseProportionOfInnerArea) * sizeFactor // Use Note's sizeFactor
+
+                if (finalNoteRadius > 0) {
+                    // Draw the inner note circle
+                    drawCircle(
+                        color = Color.Green, // Use the Note's color property
+                        radius = finalNoteRadius,
+                        center = noteActualVisualCenter
+                    )
+                    // Draw a border for the inner note
+                    drawCircle(
+                        color = Color.Yellow,
+                        radius = finalNoteRadius,
+                        center = noteActualVisualCenter,
+                        style = Stroke(width = 1.dp.toPx())
+                    )
+
+                    // Draw the text (name) for the inner note
+                    val textPaintInner = android.graphics.Paint().apply {
+                        color = Color.Cyan.toArgb() // Or a contrasting text color
+                        textSize = finalNoteRadius * 0.8f // Text size relative to the note's radius
+                        textAlign = android.graphics.Paint.Align.CENTER
+                    }
+                    drawContext.canvas.nativeCanvas.drawText(
+                        name, // Use Note's name property
+                        noteActualVisualCenter.x,
+                        noteActualVisualCenter.y - ((textPaintInner.descent() + textPaintInner.ascent()) / 2f),
+                        textPaintInner
+                    )
+                }
             }
         }
     }

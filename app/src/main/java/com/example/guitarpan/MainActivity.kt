@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
-// import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -21,15 +20,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-//import androidx.compose.foundation.Canvas
-//import androidx.compose.foundation.gestures.awaitEachGesture
-//import androidx.compose.foundation.layout.size
-//import androidx.compose.runtime.remember
 import androidx.compose.ui.input.pointer.PointerInputChange
-//import androidx.compose.ui.input.pointer.pointerInput
-//import androidx.compose.ui.input.pointer.positionChangeConsumed
 import androidx.compose.ui.input.pointer.changedToDown
-//import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.example.guitarpan.ui.theme.GuitarPanTheme
@@ -154,14 +146,14 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
                                         pressPosition,
                                         canvasCenter,
                                         drumRadiusPx,
-                                        outerNotes.size, // Still relevant for inner area calculation
+                                        0, // Still relevant for inner area calculation
                                         -1, // noteIndexInOuterRing not applicable
                                         innerRadiusRatioForOuterRing // Use the drum's overall inner ring boundary
                                     )
                                 ) {
                                     onNoteTapped(note.id)
                                     pointerInputChange.consume() // Consume the down event
-                                    notePlayedForThisPointer = true
+                                    //notePlayedForThisPointer = true
                                     return@forEach // Exit innerNotes.forEach
                                 }
                             }
@@ -190,7 +182,7 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
                 drumRadius = drawingRadius,
                 outerNotesCount = outerNotes.size,
                 noteIndexInOuterRing = index,
-                innerRadiusRatioForOuterRing = innerRadiusRatioForOuterRing
+                innerRadiusRatioForOuterRing = note.centerRatio
             )
         }
 
@@ -200,8 +192,8 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
                 drawScope = this,
                 drumCenter = drawingCenter,
                 drumRadius = drawingRadius,
-                outerNotesCount = 0, // Not relevant for drawing inner notes
-                noteIndexInOuterRing = 0, // Not relevant
+                outerNotesCount = outerNotes.size,  // Can be useful context if inner layout depends on outer
+                noteIndexInOuterRing = -1,
                 innerRadiusRatioForOuterRing = innerRadiusRatioForOuterRing // For inner area sizing
             )
         }
