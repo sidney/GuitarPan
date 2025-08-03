@@ -19,19 +19,19 @@ void PanSynth::start(double frequency, uint64_t generation) {
     // Harmonic 1: Fundamental
     mPhase[0] = 0.0;
     mPhaseIncrement[0] = (TWO_PI * frequency) / mSampleRate;
-    mAmplitude[0] = 1.0;
+    mAmplitude[0] = 0.2;
     mDecay[0] = 0.99995;
 
     // Harmonic 2: An octave or other prominent partial
     mPhase[1] = 0.0;
     mPhaseIncrement[1] = (TWO_PI * frequency * 2.001) / mSampleRate; // Slightly detuned
-    mAmplitude[1] = 0.6;
+    mAmplitude[1] = 0.12;
     mDecay[1] = 0.99992;
 
     // Harmonic 3: Another inharmonic partial
     mPhase[2] = 0.0;
     mPhaseIncrement[2] = (TWO_PI * frequency * 3.5) / mSampleRate;
-    mAmplitude[2] = 0.4;
+    mAmplitude[2] = 0.08;
     mDecay[2] = 0.99985;
 
     mIsPlaying.store(true);

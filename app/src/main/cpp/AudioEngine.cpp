@@ -145,5 +145,30 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
         }
     }
 
+    bool clippingDetectedThisCallback = false;
+    for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
+        if (floatData[i] > 1.0f || floatData[i] < -1.0f) {
+            clippingDetectedThisCallback = true;
+            // You can apply clipping here immediately if desired
+            // if (floatData[i] > 1.0f) floatData[i] = 1.0f;
+            // else if (floatData[i] < -1.0f) floatData[i] = -1.0f;
+            break; // Found clipping, no need to check further in this callback for logging purposes
+        }
+    }
+
+    if (clippingDetectedThisCallback) {
+        //__android_log_print(ANDROID_LOG_WARN, "AudioEngine", "Clipping detected in onAudioReady callback!");
+        __android_log_print(ANDROID_LOG_WARN, "AudioEngine", "Clipping detected in onAudioReady callback! numFrames: %d", numFrames);
+    }
+
+    // Then, if you haven't applied clipping yet, apply it now (or your limiter)
+    for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
+        if (floatData[i] > 1.0f) {
+            floatData[i] = 1.0f;
+        } else if (floatData[i] < -1.0f) {
+            floatData[i] = -1.0f;
+        }
+    }
+
     return oboe::DataCallbackResult::Continue;
 }
