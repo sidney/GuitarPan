@@ -1,6 +1,7 @@
 #include "AudioEngine.h"
 #include <android/log.h>
 #include <unistd.h> // For gettid()
+#include <limits> // Required for std::numeric_limits
 
 // THIS MUST MATCH MusicalNote.count in Kotlin
 #define TOTAL_MUSICAL_NOTES 20
@@ -74,16 +75,45 @@ void AudioEngine::playNote(int noteId) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(mLock);
-    // Find an inactive synth to play the note
-    for (auto &synth : mSynths) {
-        if (!synth.isPlaying()) {
-            synth.start(mNoteFrequencies[noteId]);
-            return;
-        }
+    if (!mStream) {
+        __android_log_print(ANDROID_LOG_ERROR, "AudioEngine", "Audio stream is not open!");
+        return;
     }
-    // If all synths are busy, we could choose to steal one, but for now we do nothing.
-    __android_log_print(ANDROID_LOG_WARN, "AudioEngine", "All synths busy, noteId %d not played.", noteId);
+
+    std::lock_guard<std::mutex> lock(mLock); // Protect access to mSynths and mNextNoteGeneration
+
+    // 1. Find an inactive synth
+    for (auto &synth : mSynths) {
+    if (!synth.isPlaying()) {
+        uint64_t currentGeneration = mNextNoteGeneration++;
+        synth.start(mNoteFrequencies[noteId], currentGeneration);
+        __android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Played noteId %d on new synth, gen %llu", noteId, currentGeneration);
+        return;
+    }
+}
+
+// 2. If all synths are busy, find the oldest one to steal
+    __android_log_print(ANDROID_LOG_WARN, "AudioEngine", "All synths busy. Attempting to steal oldest voice for noteId %d.", noteId);
+
+    PanSynth* oldestSynth = nullptr;
+    uint64_t oldestGeneration = std::numeric_limits<uint64_t>::max();
+
+    for (auto &synth : mSynths) {
+        if (synth.getGeneration() < oldestGeneration) { // Find synth with the smallest generation number
+            oldestGeneration = synth.getGeneration();
+            oldestSynth = &synth;
+        }
+}
+
+    if (oldestSynth != nullptr) {
+        uint64_t currentGeneration = mNextNoteGeneration++;
+        __android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Stealing synth (gen %llu) for noteId %d (new gen %llu)", oldestGeneration, noteId, currentGeneration);
+        // It's good practice for a synth's start() to reset its state (phase, envelope, etc.)
+        oldestSynth->start(mNoteFrequencies[noteId], currentGeneration);
+    } else {
+        // Should not happen if MAX_POLYPHONY > 0, but as a fallback:
+        __android_log_print(ANDROID_LOG_ERROR, "AudioEngine", "Could not find an oldest synth to steal. This is unexpected.");
+    }
 }
 
 oboe::DataCallbackResult AudioEngine::onAudioReady(
@@ -98,7 +128,17 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
         floatData[i] = 0.0f;
     }
 
-    std::lock_guard<std::mutex> lock(mLock);
+    // No lock needed here if synth.render() and synth.isPlaying() are thread-safe
+    // or if playNote is the only function modifying synth states and is locked.
+    // However, if synth.stop() can be called from render (e.g. envelope finished),
+    // and playNote modifies mSynths, mLock in playNote is good.
+    // The current mLock in playNote protects mSynths during iteration and modification.
+    // onAudioReady reads from mSynths. A lock here could cause priority inversion
+    // if it blocks the audio thread waiting for playNote.
+    // A lock-free approach or a try_lock would be better if contention is an issue.
+    // For now, assuming mSynths array itself doesn't change, and synth methods are safe.
+    // The main protection provided by mLock in playNote is for selecting/starting a synth.
+    // std::lock_guard<std::mutex> lock(mLock);
     for (auto &synth : mSynths) {
         if (synth.isPlaying()) {
             synth.render(floatData, oboeStream->getChannelCount(), numFrames);

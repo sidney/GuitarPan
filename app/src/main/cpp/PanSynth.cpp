@@ -14,7 +14,7 @@ void PanSynth::setSampleRate(double sampleRate) {
     mSampleRate = sampleRate;
 }
 
-void PanSynth::start(double frequency) {
+void PanSynth::start(double frequency, uint64_t generation) {
     // Simplified acoustic model based on common steelpan characteristics
     // Harmonic 1: Fundamental
     mPhase[0] = 0.0;
@@ -35,10 +35,15 @@ void PanSynth::start(double frequency) {
     mDecay[2] = 0.99985;
 
     mIsPlaying.store(true);
+    mCurrentGeneration = generation;
 }
 
-bool PanSynth::isPlaying() {
+bool PanSynth::isPlaying() const {
     return mIsPlaying.load();
+}
+
+uint64_t PanSynth::getGeneration() const {
+    return mCurrentGeneration;
 }
 
 void PanSynth::render(float *audioData, int numChannels, int numFrames) {
