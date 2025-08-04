@@ -8,6 +8,8 @@
 // THIS MUST MATCH MusicalNote.count in Kotlin
 #define TOTAL_MUSICAL_NOTES 20
 
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cppcoreguidelines-pro-type-member-init"
 AudioEngine::AudioEngine() {
     // Frequencies for C#3 to G#4. Order MUST MATCH MusicalNote enum in Kotlin.
 
@@ -35,6 +37,7 @@ AudioEngine::AudioEngine() {
     // ... rest of constructor, start();
     //start();  not called here, is called in the JNI native start function
 }
+#pragma clang diagnostic pop
 
 AudioEngine::~AudioEngine() {
     stop();
@@ -84,12 +87,23 @@ void AudioEngine::playNote(int noteId) {
 
     std::lock_guard<std::mutex> lock(mLock); // Protect access to mSynths and mNextNoteGeneration
 
+    // --- BEGIN Check for retriggering the same note ---
+    for (auto &synth : mSynths) {
+        if (synth.isPlaying() && synth.isCurrentlyPlayingNote(noteId)) { // You'll need to add isCurrentlyPlayingNote to PanSynth
+            uint64_t currentGeneration = mNextNoteGeneration++;
+            //__android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Retriggering noteId %d on existing synth, new gen %llu", noteId, currentGeneration);
+            synth.start(mNoteFrequencies[noteId], currentGeneration, noteId); // Or a dedicated retrigger() method
+            return;
+        }
+    }
+    // --- END Check for retriggering the same note ---
+
     // 1. Find an inactive synth
     for (auto &synth : mSynths) {
     if (!synth.isPlaying()) {
         uint64_t currentGeneration = mNextNoteGeneration++;
-        synth.start(mNoteFrequencies[noteId], currentGeneration);
-        __android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Played noteId %d on new synth, gen %llu", noteId, currentGeneration);
+        synth.start(mNoteFrequencies[noteId], currentGeneration, noteId);
+        //__android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Played noteId %d on new synth, gen %llu", noteId, currentGeneration);
         return;
     }
 }
@@ -109,9 +123,9 @@ void AudioEngine::playNote(int noteId) {
 
     if (oldestSynth != nullptr) {
         uint64_t currentGeneration = mNextNoteGeneration++;
-        __android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Stealing synth (gen %llu) for noteId %d (new gen %llu)", oldestGeneration, noteId, currentGeneration);
+        //__android_log_print(ANDROID_LOG_INFO, "AudioEngine", "Stealing synth (gen %llu) for noteId %d (new gen %llu)", oldestGeneration, noteId, currentGeneration);
         // It's good practice for a synth's start() to reset its state (phase, envelope, etc.)
-        oldestSynth->start(mNoteFrequencies[noteId], currentGeneration);
+        oldestSynth->start(mNoteFrequencies[noteId], currentGeneration, noteId);
     } else {
         // Should not happen if MAX_POLYPHONY > 0, but as a fallback:
         __android_log_print(ANDROID_LOG_ERROR, "AudioEngine", "Could not find an oldest synth to steal. This is unexpected.");
@@ -143,9 +157,31 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
 
     // 2. Render all active synths (they add their output)
     // std::lock_guard<std::mutex> lock(mLock); // Consider if needed based on synth.render safety
+    int activeSynths = 0;
+    for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) { // Zero out first
+        floatData[i] = 0.0f;
+    }
     for (auto &synth : mSynths) {
         if (synth.isPlaying()) {
-            synth.render(floatData, oboeStream->getChannelCount(), numFrames);
+            synth.render(floatData, oboeStream->getChannelCount(), numFrames); // Synths add to floatData
+            activeSynths++;
+        }
+    }
+
+// 2.5. Apply Polyphony Attenuation (if needed)
+    float polyphonyAttenuation;
+    if (activeSynths == 2) { // Example: -3dB for 2 notes
+        polyphonyAttenuation = 0.707f;
+    } else if (activeSynths == 3) { // Example: ~-4.8dB for 3 notes
+        polyphonyAttenuation = 0.577f;
+    } else if (activeSynths >= 4) { // Example: -6dB for 4+ notes
+        polyphonyAttenuation = 0.5f;
+    }
+    // else if activeSynths is 0 or 1, polyphonyAttenuation is not used (no change)
+
+    if (activeSynths > 1) { // Only apply if more than one synth was active
+        for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
+            floatData[i] *= polyphonyAttenuation;
         }
     }
 
@@ -164,7 +200,7 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     // This will smoothly handle peaks that now exceed +/- 1.0 after the makeupGain.
     // The 'drive' parameter controls how quickly the signal saturates.
     // A drive of 1.0 is a good starting point. Higher values increase saturation.
-    const float softClipDrive = 1.0f; // Adjust this to control saturation effect (e.g., 0.5 to 2.0 or higher)
+    const float softClipDrive = 0.7f; // Adjust this to control saturation effect (e.g., 0.5 to 2.0 or higher)
 
     // For monitoring how much the soft clipper is working (optional logging)
     float maxSampleBeforeSoftClip = 0.0f;
@@ -213,9 +249,9 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     // and if the soft clipper was engaged.
     if (maxSampleBeforeSoftClip > 1.0f || softClippingOccurred) { // Log if input was hot or clipper worked
         // Note: numFrames here is the actual frames in this callback
-        __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
-                            "Soft Clipper engaged. Peak IN: %.2f, Peak OUT: %.2f, (numFrames: %d)",
-                            maxSampleBeforeSoftClip, maxSampleAfterSoftClip, numFrames);
+//        __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
+//                            "Soft Clipper engaged. Peak IN: %.2f, Peak OUT: %.2f, (numFrames: %d)",
+//                            maxSampleBeforeSoftClip, maxSampleAfterSoftClip, numFrames);
     }
 
     // The output is now soft-clipped and should be within [-1.0, 1.0]

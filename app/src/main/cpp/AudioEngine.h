@@ -7,7 +7,7 @@
 #include <atomic>
 #include "PanSynth.h"
 
-#define MAX_POLYPHONY 50
+#define MAX_POLYPHONY 10
 #define TOTAL_MUSICAL_NOTES 20 // As defined in NoteLayout.kt
 
 class AudioEngine : public oboe::AudioStreamDataCallback {
