@@ -3,19 +3,23 @@
 
 constexpr double TWO_PI = 2.0 * M_PI;
 
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "cppcoreguidelines-pro-type-member-init"
 PanSynth::PanSynth() {
     memset(mPhase, 0, sizeof(mPhase));
     memset(mPhaseIncrement, 0, sizeof(mPhaseIncrement));
     memset(mAmplitude, 0, sizeof(mAmplitude));
     memset(mDecay, 0, sizeof(mDecay));
 }
+#pragma clang diagnostic pop
 
 void PanSynth::setSampleRate(double sampleRate) {
     mSampleRate = sampleRate;
 }
 
-void PanSynth::start(double frequency, uint64_t generation) {
+void PanSynth::start(double frequency, uint64_t generation, int noteId) {
     // Simplified acoustic model based on common steelpan characteristics
+    mCurrentNoteId = noteId;
     // Harmonic 1: Fundamental
     mPhase[0] = 0.0;
     mPhaseIncrement[0] = (TWO_PI * frequency) / mSampleRate;
@@ -42,7 +46,11 @@ bool PanSynth::isPlaying() const {
     return mIsPlaying.load();
 }
 
-uint64_t PanSynth::getGeneration() const {
+bool PanSynth::isCurrentlyPlayingNote(int noteId) const {
+    return mIsPlaying && mCurrentNoteId == noteId;
+}
+
+    uint64_t PanSynth::getGeneration() const {
     return mCurrentGeneration;
 }
 
@@ -53,7 +61,7 @@ void PanSynth::render(float *audioData, int numChannels, int numFrames) {
         float sample = 0.0f;
 
         for (int j = 0; j < NUM_HARMONICS; ++j) {
-            sample += sin(mPhase[j]) * mAmplitude[j];
+            sample += sin(mPhase[j]) * mAmplitude[j]; // NOLINT(*-narrowing-conversions)
             mPhase[j] += mPhaseIncrement[j];
             if (mPhase[j] >= TWO_PI) mPhase[j] -= TWO_PI;
             mAmplitude[j] *= mDecay[j];
@@ -68,5 +76,6 @@ void PanSynth::render(float *audioData, int numChannels, int numFrames) {
     // Stop playing if amplitude is negligible
     if (mAmplitude[0] < 0.001) {
         mIsPlaying.store(false);
+        mCurrentNoteId = -1;
     }
 }
