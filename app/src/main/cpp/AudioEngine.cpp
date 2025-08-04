@@ -1,4 +1,6 @@
 #include "AudioEngine.h"
+#include <cmath> // Required for std::tanh
+#include <algorithm> // Required for std::abs (though cmath might also provide it for floats)
 #include <android/log.h>
 #include <unistd.h> // For gettid()
 #include <limits> // Required for std::numeric_limits
@@ -123,7 +125,7 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
 
     auto *floatData = static_cast<float *>(audioData);
 
-    // Zero out the buffer
+    // 1. Zero out the buffer
     for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
         floatData[i] = 0.0f;
     }
@@ -138,37 +140,93 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(
     // A lock-free approach or a try_lock would be better if contention is an issue.
     // For now, assuming mSynths array itself doesn't change, and synth methods are safe.
     // The main protection provided by mLock in playNote is for selecting/starting a synth.
-    // std::lock_guard<std::mutex> lock(mLock);
+
+    // 2. Render all active synths (they add their output)
+    // std::lock_guard<std::mutex> lock(mLock); // Consider if needed based on synth.render safety
     for (auto &synth : mSynths) {
         if (synth.isPlaying()) {
             synth.render(floatData, oboeStream->getChannelCount(), numFrames);
         }
     }
 
-    bool clippingDetectedThisCallback = false;
+    // 3. Apply Master Volume Boost (Makeup Gain BEFORE soft clipping)
+    // Experiment with this value. Higher values will drive the soft clipper harder.
+    // Start with a moderate value, e.g., 1.5 to 3.0.
+    // If your individual synths are already outputting at -12dBFS to -18dBFS peaks
+    // when summed, a makeupGain of 2.0 to 4.0 might be appropriate.
+    const float makeupGain = 2.5f; // Example: boost by +~8dB if this was 2.5 (20*log10(2.5))
+
     for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
-        if (floatData[i] > 1.0f || floatData[i] < -1.0f) {
-            clippingDetectedThisCallback = true;
-            // You can apply clipping here immediately if desired
-            // if (floatData[i] > 1.0f) floatData[i] = 1.0f;
-            // else if (floatData[i] < -1.0f) floatData[i] = -1.0f;
-            break; // Found clipping, no need to check further in this callback for logging purposes
+        floatData[i] *= makeupGain;
+    }
+
+    // 4. Apply a Soft Clipper using std::tanh
+    // This will smoothly handle peaks that now exceed +/- 1.0 after the makeupGain.
+    // The 'drive' parameter controls how quickly the signal saturates.
+    // A drive of 1.0 is a good starting point. Higher values increase saturation.
+    const float softClipDrive = 1.0f; // Adjust this to control saturation effect (e.g., 0.5 to 2.0 or higher)
+
+    // For monitoring how much the soft clipper is working (optional logging)
+    float maxSampleBeforeSoftClip = 0.0f;
+    float maxSampleAfterSoftClip = 0.0f;
+    bool softClippingOccurred = false;
+
+    for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
+        float currentSample = floatData[i];
+
+        if (std::abs(currentSample) > maxSampleBeforeSoftClip) {
+            maxSampleBeforeSoftClip = std::abs(currentSample);
+        }
+
+        // Apply tanh for soft clipping.
+        // The result of tanh(x) is always in the range [-1, 1].
+        // Multiplying by softClipDrive inside tanh makes the "knee" harder or softer.
+        float clippedSample = std::tanh(currentSample * softClipDrive);
+
+        // Optional: If you want to ensure the output of tanh doesn't lose perceived loudness
+        // for signals that weren't originally far above 1.0, you might normalize.
+        // However, a simple tanh is often used directly for its saturation character.
+        // For a more transparent soft clipper, one might divide by tanh(softClipDrive)
+        // if softClipDrive is also the intended max input before full saturation.
+        // Example with normalization (can make the effect more subtle if drive is low):
+        // if (softClipDrive > 0) { // Avoid division by zero if drive could be 0
+        //    clippedSample = std::tanh(currentSample * softClipDrive) / std::tanh(softClipDrive);
+        // } else {
+        //    clippedSample = currentSample; // Or handle as no clipping if drive is 0
+        // }
+        // For now, let's use the simpler direct tanh output for its characteristic sound.
+
+        floatData[i] = clippedSample;
+
+        if (std::abs(currentSample) > 1.0f && std::abs(clippedSample) < std::abs(currentSample)) {
+            // This crude check indicates the soft clipper had an effect on a sample that was over 1.0
+            softClippingOccurred = true;
+        }
+        if (std::abs(clippedSample) > maxSampleAfterSoftClip) {
+            maxSampleAfterSoftClip = std::abs(clippedSample);
         }
     }
 
-    if (clippingDetectedThisCallback) {
-        //__android_log_print(ANDROID_LOG_WARN, "AudioEngine", "Clipping detected in onAudioReady callback!");
-        __android_log_print(ANDROID_LOG_WARN, "AudioEngine", "Clipping detected in onAudioReady callback! numFrames: %d", numFrames);
+    // 5. Logging (Optional - for debugging the soft clipper's effect)
+    // This log can be conditional or removed once you're happy with the sound.
+    // It will tell you the peak *before* soft clipping (to see how hard it was driven)
+    // and if the soft clipper was engaged.
+    if (maxSampleBeforeSoftClip > 1.0f || softClippingOccurred) { // Log if input was hot or clipper worked
+        // Note: numFrames here is the actual frames in this callback
+        __android_log_print(ANDROID_LOG_INFO, "AudioEngine",
+                            "Soft Clipper engaged. Peak IN: %.2f, Peak OUT: %.2f, (numFrames: %d)",
+                            maxSampleBeforeSoftClip, maxSampleAfterSoftClip, numFrames);
     }
 
-    // Then, if you haven't applied clipping yet, apply it now (or your limiter)
-    for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
-        if (floatData[i] > 1.0f) {
-            floatData[i] = 1.0f;
-        } else if (floatData[i] < -1.0f) {
-            floatData[i] = -1.0f;
-        }
-    }
+    // The output is now soft-clipped and should be within [-1.0, 1.0]
+    // (tanh theoretically approaches +/-1 but might not exactly reach it for finite inputs,
+    // though practically it's very close for inputs > 3 or 4).
+    // A final hard clip is usually not strictly necessary with tanh but can be added
+    // as an absolute safety for extremely large, unexpected float values if you're paranoid.
+    // for (int i = 0; i < numFrames * oboeStream->getChannelCount(); ++i) {
+    //    if (floatData[i] > 1.0f) floatData[i] = 1.0f;
+    //    else if (floatData[i] < -1.0f) floatData[i] = -1.0f;
+    // }
 
     return oboe::DataCallbackResult::Continue;
 }

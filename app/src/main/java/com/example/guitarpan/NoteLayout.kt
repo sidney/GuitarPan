@@ -37,9 +37,9 @@ data class Note(
         tapOffset: Offset,
         drumCenter: Offset,
         drumRadius: Float,
-        outerNotesCount: Int, // Total number of outer notes for this drum
-        noteIndexInOuterRing: Int, // This note's index if it's an OUTER note
-        innerRadiusRatioForOuterRing: Float // e.g., 0.6f meaning outer notes are between 0.6*R and R
+        outerNotesCount: Int,
+        noteIndexInOuterRing: Int,
+        passedInnerRadiusRatio: Float // For OUTER, this is note.centerRatio; for INNER, global inner ratio
     ): Boolean {
         val dx = tapOffset.x - drumCenter.x
         val dy = tapOffset.y - drumCenter.y
@@ -48,41 +48,67 @@ data class Note(
         if (type == NoteType.OUTER) {
             if (outerNotesCount == 0) return false
             val noteRingOuterRadius = drumRadius
-            val noteRingInnerRadius = drumRadius * innerRadiusRatioForOuterRing
+            val noteRingInnerRadius = drumRadius * this.centerRatio // Use the note's own centerRatio
 
             if (distanceFromCenter < noteRingInnerRadius || distanceFromCenter > noteRingOuterRadius) {
-                return false // Tap is outside the radial band of the outer notes
+                return false
             }
 
-            // Calculate angle of the tap
-            var angle = atan2(dy, dx) // Radians, -PI to PI
-            if (angle < 0) angle += 2 * PI.toFloat() // Normalize to 0 to 2*PI
-
-            val sweepAnglePerNote = (2 * PI / outerNotesCount).toFloat()
-            val startAngleForNote = noteIndexInOuterRing * sweepAnglePerNote
-
-            // Check if tap angle is within this note's segment
-            // Handle wrap-around for the last segment potentially crossing 0 radians
-            val endAngleForNote = startAngleForNote + sweepAnglePerNote
-            if (startAngleForNote <= endAngleForNote) { // Normal case
-                return angle >= startAngleForNote && angle < endAngleForNote
-            } else { // Wrap around case (shouldn't happen with normalized startAngleForNote)
-                return angle >= startAngleForNote || angle < endAngleForNote
+            // --- Calculate Tap Angle in Standard Android Canvas Coordinates ---
+            // 0 degrees at 3 o'clock, positive angles are Clockwise (CW).
+            var tapAngleCanvasDeg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            // No need to add 360 here yet, comparison logic will handle negative atan2 results if needed,
+            // or we can normalize it to [0, 360) like drawArc might expect.
+            // Let's normalize tapAngle to [0, 360) for consistency.
+            if (tapAngleCanvasDeg < 0f) {
+                tapAngleCanvasDeg += 360f
             }
+            // --- End Tap Angle Calculation ---
+
+            val sweepAngleDegrees = 360f / outerNotesCount
+
+            // Define segment boundaries matching the draw() method's logic
+            // draw() uses: baseStartAngle = (noteIndexInOuterRing * angleStep) + 90f for the *center*
+            // and segmentStartAngle = baseStartAngle - (angleStep / 2f) for the *start* of the arc.
+
+            val centerOfThisNoteSegmentDeg = (noteIndexInOuterRing * sweepAngleDegrees) + 90f
+
+            var startAngleForSegmentDeg = centerOfThisNoteSegmentDeg - sweepAngleDegrees / 2f
+            // endAngleForSegmentDeg will be startAngleForSegmentDeg + sweepAngleDegrees
+
+            // Normalize startAngleForSegmentDeg to [0, 360) to simplify comparisons,
+            // especially if it becomes negative from the subtraction.
+            while (startAngleForSegmentDeg < 0f) {
+                startAngleForSegmentDeg += 360f
+            }
+            startAngleForSegmentDeg %= 360f // Ensure it's strictly < 360 after additions
+
+            val endAngleForSegmentDeg = startAngleForSegmentDeg + sweepAngleDegrees
+
+            // Now, tapAngleCanvasDeg is [0, 360)
+            // startAngleForSegmentDeg is [0, 360)
+            // endAngleForSegmentDeg might be > 360 if the segment wraps
+
+            if (endAngleForSegmentDeg > 360f + 0.001f) { // Segment wraps around 360 degrees
+                // Example: start=350, sweep=20, end=370. Tap at 5 (which is < end-360=10) is IN.
+                // Tap at 355 is IN.
+                return (tapAngleCanvasDeg >= startAngleForSegmentDeg && tapAngleCanvasDeg < 360f) ||
+                        (tapAngleCanvasDeg >= 0f && tapAngleCanvasDeg < (endAngleForSegmentDeg - 360f))
+            } else {
+                // Segment does not wrap (or ends exactly at 360)
+                return tapAngleCanvasDeg >= startAngleForSegmentDeg && tapAngleCanvasDeg < endAngleForSegmentDeg
+            }
+
         } else if (type == NoteType.INNER) {
-            val innerAreaMaxRadius =
-                drumRadius * innerRadiusRatioForOuterRing // Boundary of the clear inner space
-            val baseInnerNoteRadius =
-                innerAreaMaxRadius * 0.30f // e.g., a note is 30% of the inner area radius by default
+            val innerAreaMaxRadius = drumRadius * passedInnerRadiusRatio
+            val baseInnerNoteRadius = innerAreaMaxRadius * 0.30f // Example proportion
             val finalInnerNoteRadius = baseInnerNoteRadius * this.sizeFactor
 
             if (finalInnerNoteRadius <= 0) return false
 
-            val dx =
-                tapOffset.x - (drumCenter.x + (xOffset * innerAreaMaxRadius)) // Account for xOffset
-            val dy =
-                tapOffset.y - (drumCenter.y + (yOffset * innerAreaMaxRadius)) // Account for yOffset
-            val distanceFromNoteCenter = sqrt(dx * dx + dy * dy)
+            val dxInner = tapOffset.x - (drumCenter.x + (xOffset * innerAreaMaxRadius))
+            val dyInner = tapOffset.y - (drumCenter.y + (yOffset * innerAreaMaxRadius))
+            val distanceFromNoteCenter = sqrt(dxInner * dxInner + dyInner * dyInner)
 
             return distanceFromNoteCenter <= finalInnerNoteRadius
         }
@@ -108,7 +134,7 @@ data class Note(
                 // --- Outer Note Drawing (Convex Inner Edge) ---
                 val angleStep = 360f / outerNotesCount
                 // Adjusted startAngle to better center the segment visually
-                val baseStartAngle = (noteIndexInOuterRing * angleStep) - 90f
+                val baseStartAngle = (noteIndexInOuterRing * angleStep) + 90f  // first note in list of outer ring is at 6 o'clock
                 val segmentStartAngle = baseStartAngle - (angleStep / 2f)
                 val segmentSweepAngle = angleStep
 
@@ -273,15 +299,16 @@ class NoteLayout {
 
     // Example Layout (adjust xOffset, yOffset, sizeFactor for inner notes for good spacing)
     // The order of OUTER notes in this list determines their segment order around the drum.
+    // The first note is at 6 o'clock, then proceed clockwise.
     val leftDrumNotes = listOf(
         // Outer - centerRatio defines inner boundary of the ring, e.g. 0.6 means ring is from 0.6*R to R
-        createNote(name = "C4", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "F#3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "Bb3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "D3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "G#3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "E3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "E4", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "C4", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "F#3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "Bb3", type = NoteType.OUTER, centerRatio = 0.6f),
 
         // Inner - xOffset/yOffset are relative to center of *inner area* (-1 to 1 range typical)
         // centerRatio for inner notes defines their radial distance factor if angleDegrees is used for polar placement.
@@ -293,13 +320,13 @@ class NoteLayout {
     )
 
     val rightDrumNotes = listOf(
-        createNote(name = "B3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "F3", type = NoteType.OUTER, centerRatio = 0.6f),
-        createNote(name = "A3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "C#3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "G3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "Eb3", type = NoteType.OUTER, centerRatio = 0.6f),
         createNote(name = "Eb4", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "B3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "F3", type = NoteType.OUTER, centerRatio = 0.6f),
+        createNote(name = "A3", type = NoteType.OUTER, centerRatio = 0.6f),
 
         createNote(name = "C#4", type = NoteType.INNER, xOffset = 0f, yOffset = 0.5f, sizeFactor = 0.8f),
         createNote(name = "G4", type = NoteType.INNER, xOffset = -0.45f, yOffset = -0.25f, sizeFactor = 0.7f),
