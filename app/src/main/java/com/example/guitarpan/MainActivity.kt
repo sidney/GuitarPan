@@ -1,6 +1,7 @@
 package com.example.guitarpan
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -130,6 +131,10 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
                                         note.centerRatio // Outer note uses its own centerRatio
                                     )
                                 ) {
+                                    Log.d(
+                                        "TapDebug",
+                                        "Outer Note Tapped! Name: ${note.name}, ID: ${note.id}, IndexInOuterRing: $index, OuterNotesCount: ${outerNotes.size}"
+                                    )
                                     onNoteTapped(note.id)
                                     pointerInputChange.consume() // Consume the down event
                                     notePlayedForThisPointer = true
@@ -151,6 +156,10 @@ fun PanDrum(diameterDp: Float, notes: List<Note>, onNoteTapped: (Int) -> Unit) {
                                         innerRadiusRatioForOuterRing // Use the drum's overall inner ring boundary
                                     )
                                 ) {
+                                    Log.d(
+                                        "TapDebug",
+                                        "Inner Note Tapped! Name: ${note.name}, ID: ${note.id}"
+                                    )
                                     onNoteTapped(note.id)
                                     pointerInputChange.consume() // Consume the down event
                                     //notePlayedForThisPointer = true
